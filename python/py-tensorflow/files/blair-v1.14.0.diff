@@ -1,0 +1,123 @@
+diff --git a/tensorflow/core/kernels/concat_lib_gpu_impl.cu.cc b/tensorflow/core/kernels/concat_lib_gpu_impl.cu.cc
+index e234fb87b7..12e6a1ff8f 100644
+--- a/tensorflow/core/kernels/concat_lib_gpu_impl.cu.cc
++++ b/tensorflow/core/kernels/concat_lib_gpu_impl.cu.cc
+@@ -70,7 +70,7 @@ __global__ void concat_variable_kernel(
+   IntType num_inputs = input_ptr_data.size;
+ 
+   // verbose declaration needed due to template
+-  extern __shared__ __align__(sizeof(T)) unsigned char smem[];
++  extern __shared__ __align__(sizeof(T) > 16 ? sizeof(T) : 16) unsigned char smem[];
+   IntType* smem_col_scan = reinterpret_cast<IntType*>(smem);
+ 
+   if (useSmem) {
+diff --git a/tensorflow/core/kernels/conv_ops.cc b/tensorflow/core/kernels/conv_ops.cc
+index 75ac6e108e..d370ef6b11 100644
+--- a/tensorflow/core/kernels/conv_ops.cc
++++ b/tensorflow/core/kernels/conv_ops.cc
+@@ -813,18 +813,15 @@ void LaunchConv2DOp<GPUDevice, T>::operator()(
+       << "Negative row or col paddings: (" << common_padding_rows << ", "
+       << common_padding_cols << ")";
+ 
+-  constexpr auto kComputeInNHWC =
+-      std::make_tuple(se::dnn::DataLayout::kBatchYXDepth,
+-                      se::dnn::FilterLayout::kOutputYXInput);
+-  constexpr auto kComputeInNCHW =
+-      std::make_tuple(se::dnn::DataLayout::kBatchDepthYX,
+-                      se::dnn::FilterLayout::kOutputInputYX);
+-
+   se::dnn::DataLayout compute_data_layout;
+   se::dnn::FilterLayout filter_layout;
+ 
+   std::tie(compute_data_layout, filter_layout) =
+-      compute_data_format == FORMAT_NHWC ? kComputeInNHWC : kComputeInNCHW;
++      compute_data_format == FORMAT_NHWC
++          ? std::make_tuple(se::dnn::DataLayout::kBatchYXDepth,
++                            se::dnn::FilterLayout::kOutputYXInput)
++          : std::make_tuple(se::dnn::DataLayout::kBatchDepthYX,
++                            se::dnn::FilterLayout::kOutputInputYX);
+ 
+   se::dnn::BatchDescriptor input_desc;
+   input_desc.set_count(in_batch)
+diff --git a/tensorflow/core/kernels/split_lib_gpu.cu.cc b/tensorflow/core/kernels/split_lib_gpu.cu.cc
+index 558c6439bb..fa26f471c1 100644
+--- a/tensorflow/core/kernels/split_lib_gpu.cu.cc
++++ b/tensorflow/core/kernels/split_lib_gpu.cu.cc
+@@ -124,7 +124,7 @@ __global__ void split_v_kernel(const T* input_ptr,
+   int num_outputs = output_ptr_data.size;
+ 
+   // verbose declaration needed due to template
+-  extern __shared__ __align__(sizeof(T)) unsigned char smem[];
++  extern __shared__ __align__(sizeof(T) > 16 ? sizeof(T) : 16) unsigned char smem[];
+   IntType* smem_col_scan = reinterpret_cast<IntType*>(smem);
+ 
+   if (useSmem) {
+diff --git a/tensorflow/core/kernels/tridiagonal_solve_op_gpu.cu.cc b/tensorflow/core/kernels/tridiagonal_solve_op_gpu.cu.cc
+index d70cc92f21..4d1b5d5502 100644
+--- a/tensorflow/core/kernels/tridiagonal_solve_op_gpu.cu.cc
++++ b/tensorflow/core/kernels/tridiagonal_solve_op_gpu.cu.cc
+@@ -39,7 +39,7 @@ static const char kNotInvertibleScalarMsg[] =
+     "The matrix is not invertible: it is a scalar with value zero.";
+ 
+ template <typename Scalar>
+-__global__ void SolveForSizeOneOrTwoKernel(const int m, const Scalar* diags,
++__device__ void SolveForSizeOneOrTwoKernel(const int m, const Scalar* diags,
+                                            const Scalar* rhs, const int num_rhs,
+                                            Scalar* x, bool* not_invertible) {
+   if (m == 1) {
+diff --git a/tensorflow/core/util/gpu_device_functions.h b/tensorflow/core/util/gpu_device_functions.h
+index 7230150c89..b9642605ad 100644
+--- a/tensorflow/core/util/gpu_device_functions.h
++++ b/tensorflow/core/util/gpu_device_functions.h
+@@ -118,7 +118,7 @@ const unsigned kCudaWarpAll = 0xffffffff;
+ __device__ inline unsigned CudaLaneId() {
+   unsigned int lane_id;
+ #if GOOGLE_CUDA
+-#if __clang__
++#if 0 && __clang__
+   return __nvvm_read_ptx_sreg_laneid();
+ #else   // __clang__
+   asm("mov.u32 %0, %%laneid;" : "=r"(lane_id));
+diff --git a/third_party/gpus/cuda_configure.bzl b/third_party/gpus/cuda_configure.bzl
+index f250ecda63..a957456911 100644
+--- a/third_party/gpus/cuda_configure.bzl
++++ b/third_party/gpus/cuda_configure.bzl
+@@ -552,8 +552,18 @@ def find_lib(repository_ctx, paths, check_soname = True):
+             continue
+         if check_soname and objdump != None and not _is_windows(repository_ctx):
+             output = repository_ctx.execute([objdump, "-p", str(path)]).stdout
+-            output = [line for line in output.splitlines() if "SONAME" in line]
+-            sonames = [line.strip().split(" ")[-1] for line in output]
++            lines = output.splitlines()
++            sonames = []
++            for line in lines:
++                parts = line.strip().split(" ")
++                if len(parts) < 2:
++                    continue
++                if parts[0] != "name":
++                    continue
++                soname = parts[1]
++                soname_parts = soname.split("/")
++                sonames.append(soname_parts[-1])
++                mismatches.append(str(soname_parts[-1]))
+             if not any([soname == path.basename for soname in sonames]):
+                 mismatches.append(str(path))
+                 continue
+@@ -602,7 +612,7 @@ def _find_libs(repository_ctx, cuda_config):
+         Map of library names to structs of filename and path.
+       """
+     cpu_value = cuda_config.cpu_value
+-    stub_dir = "" if _is_windows(repository_ctx) else "/stubs"
++    stub_dir = "" # if _is_windows(repository_ctx) else "/stubs"
+     return {
+         "cuda": _find_cuda_lib(
+             "cuda",
+@@ -931,7 +941,7 @@ def make_copy_dir_rule(repository_ctx, name, src_dir, out_dir):
+     outs = [
+ %s
+     ],
+-    cmd = \"""cp -rLf "%s/." "%s/" \""",
++    cmd = \"""/opt/local/libexec/gnubin/cp -rLf "%s/." "%s/" \""",
+ )""" % (name, "\n".join(outs), src_dir, out_dir)
+ 
+ def _read_dir(repository_ctx, src_dir):
