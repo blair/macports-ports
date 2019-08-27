@@ -1,0 +1,18 @@
+--- compressed_tuple.h.FCS	2019-08-26 20:40:35.000000000 -0700
++++ compressed_tuple.h	2019-08-26 20:41:30.000000000 -0700
+@@ -165,6 +165,7 @@
+     return internal_compressed_tuple::Storage<CompressedTuple, I>::get();
+   }
+ 
++#if 0
+   template <int I>
+   ElemT<I>&& get() && {
+     return std::move(*this)
+@@ -176,6 +177,7 @@
+     return absl::move(*this)
+         .internal_compressed_tuple::template Storage<CompressedTuple, I>::get();
+   }
++#endif /* 0 */
+ };
+ 
+ // Explicit specialization for a zero-element tuple
