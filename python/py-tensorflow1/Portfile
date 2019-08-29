@@ -186,10 +186,17 @@ if {${name} ne ${subport}} {
         foreach d {/Developer/NVIDIA/CUDA-10.1/lib /usr/local/cuda/lib /opt/intel/cudnn-10.1-osx-x64-v7.6.3.30/lib} {
             set tf_bazel_build_opts "${tf_bazel_build_opts} --linkopt -Wl,-rpath,${d}"
         }
+
+        # The monolothic build uses -lgomp which is provided by gcc9's
+        # /opt/local/lib/gcc9/libgomp.dylib.
+        set tf_bazel_build_opts "${tf_bazel_build_opts} --config=monolithic --linkopt -L/opt/local/lib/gcc9 --linkopt -Wl,-rpath,/opt/local/lib/gcc9"
+
         # To unblock the person building the package as quickly as
         # possible, build the target that gets a compile failure due
         # to an unpatched compressed_tuple.h.
         system -W ${worksrcpath} "${tf_bazel_cmd} build ${tf_bazel_build_opts} //tensorflow/core/kernels:fill_functor"
+        system -W ${worksrcpath} "${tf_bazel_cmd} build ${tf_bazel_build_opts} //tensorflow/tools/lib_package:libtensorflow"
+        system -W exit 1
         system -W ${worksrcpath} "${tf_bazel_cmd} build ${tf_bazel_build_opts} //tensorflow/tools/pip_package:build_pip_package"
         # Build the python wheel
         system -W ${worksrcpath} "./bazel-bin/tensorflow/tools/pip_package/build_pip_package ${workpath}"
