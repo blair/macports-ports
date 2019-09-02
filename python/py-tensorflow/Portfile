@@ -153,7 +153,7 @@ if {${name} ne ${subport}} {
         }
         # Build using the wonderful bazel build system ...
         set tf_bazel_cmd "bazel --max_idle_secs=60 --output_user_root=${workpath}"
-        set tf_bazel_build_opts "-s -c opt --config=opt"
+        set tf_bazel_build_opts "--verbose_failures -c opt --config=opt"
         # hack to try and transfer MP c, c++ and ld options to bazel...
         foreach opt [list {*}${configure.cflags} ] {
             set tf_bazel_build_opts "${tf_bazel_build_opts} --conlyopt '${opt}'"
