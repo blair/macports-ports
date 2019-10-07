@@ -1,0 +1,43 @@
+diff --git a/third_party/gpus/cuda_configure.bzl b/third_party/gpus/cuda_configure.bzl
+index f250ecda63..a957456911 100644
+--- a/third_party/gpus/cuda_configure.bzl
++++ b/third_party/gpus/cuda_configure.bzl
+@@ -552,8 +552,18 @@ def find_lib(repository_ctx, paths, check_soname = True):
+             continue
+         if check_soname and objdump != None and not _is_windows(repository_ctx):
+             output = repository_ctx.execute([objdump, "-p", str(path)]).stdout
+-            output = [line for line in output.splitlines() if "SONAME" in line]
+-            sonames = [line.strip().split(" ")[-1] for line in output]
++            lines = output.splitlines()
++            sonames = []
++            for line in lines:
++                parts = line.strip().split(" ")
++                if len(parts) < 2:
++                    continue
++                if parts[0] != "name":
++                    continue
++                soname = parts[1]
++                soname_parts = soname.split("/")
++                sonames.append(soname_parts[-1])
++                mismatches.append(str(soname_parts[-1]))
+             if not any([soname == path.basename for soname in sonames]):
+                 mismatches.append(str(path))
+                 continue
+@@ -602,7 +612,7 @@ def _find_libs(repository_ctx, cuda_config):
+         Map of library names to structs of filename and path.
+       """
+     cpu_value = cuda_config.cpu_value
+-    stub_dir = "" if _is_windows(repository_ctx) else "/stubs"
++    stub_dir = "" # if _is_windows(repository_ctx) else "/stubs"
+     return {
+         "cuda": _find_cuda_lib(
+             "cuda",
+@@ -931,7 +941,7 @@ def make_copy_dir_rule(repository_ctx, name, src_dir, out_dir):
+     outs = [
+ %s
+     ],
+-    cmd = \"""cp -rLf "%s/." "%s/" \""",
++    cmd = \"""/opt/local/libexec/gnubin/cp -rLf "%s/." "%s/" \""",
+ )""" % (name, "\n".join(outs), src_dir, out_dir)
+ 
+ def _read_dir(repository_ctx, src_dir):

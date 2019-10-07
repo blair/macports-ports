@@ -44,7 +44,8 @@ java.fallback       openjdk13
 # Note setting here should be in sync with that in bazel
 set tf_min_xcode    9.0
 
-patchfiles-append blair-v1.14.0.diff
+# patchfiles-append blair-v1.14.0.diff
+patchfiles-append blair-v2.0.0.diff
 
 if {${os.major} < 16} {
     # Work around for issues with clock_gettime(CLOCK_REALTIME, &ts);
