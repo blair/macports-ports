@@ -100,9 +100,9 @@ if {${name} ne ${subport}} {
     configure.env-append PYTHON_LIB_PATH=${python.prefix}/lib/python${python.branch}/site-packages
     configure.env-append PYTHON_BIN_PATH=${prefix}/bin/python${python.branch}
     configure.env-append JAVA_HOME=${java.home}
-    configure.env-append TF_NEED_CUDA=1
-    configure.env-append TF_CUDA_PATHS=/usr/local/cuda,/Developer/NVIDIA/CUDA-10.1,/opt/intel/cudnn-10.1-osx-x64-v7.6.3.30
-    configure.env-append TF_CUDA_COMPUTE_CAPABILITIES=3.0
+#    configure.env-append TF_NEED_CUDA=1
+#    configure.env-append TF_CUDA_PATHS=/usr/local/cuda,/Developer/NVIDIA/CUDA-10.1,/opt/intel/cudnn-10.1-osx-x64-v7.6.3.30
+#    configure.env-append TF_CUDA_COMPUTE_CAPABILITIES=3.0
     build.env-append     TMPDIR=${workpath}/tmp
     build.env-append     JAVA_HOME=${java.home}
     set base_march "-march=x86-64"
@@ -159,7 +159,8 @@ if {${name} ne ${subport}} {
         }
         # Build using the wonderful bazel build system ...
         set tf_bazel_cmd "bazel --max_idle_secs=60 --output_user_root=${workpath}"
-        set tf_bazel_build_opts "--verbose_failures -c opt --config=opt --config=cuda --config=nonccl"
+        set tf_bazel_build_opts "--verbose_failures -c opt --config=opt"
+        #        set tf_bazel_build_opts "--verbose_failures -c opt --config=opt --config=cuda --config=nonccl"
         # hack to try and transfer MP c, c++ and ld options to bazel...
         foreach opt [list {*}${configure.cflags} ] {
             set tf_bazel_build_opts "${tf_bazel_build_opts} --conlyopt '${opt}'"
